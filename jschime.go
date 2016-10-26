@@ -1,15 +1,22 @@
-#include <sys/ioctl.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdbool.h>
-#include <linux/joystick.h>
+package jschime
 
+// #include <sys/ioctl.h>
+// #include <sys/time.h>
+// #include <sys/types.h>
+// #include <stdlib.h>
+// #include <fcntl.h>
+// #include <unistd.h>
+// #include <stdio.h>
+// #include <errno.h>
+// #include <string.h>
+// #include <stdbool.h>
+// #include <linux/joystick.h>
+import "C"
+import "fmt"
+
+#define NAME_LENGTH 128
 #define RING_BUFFER_LENGTH (1 << 6)
+
 
 int detect_command(
 		const __u8 *button_buffer, const __u32 *time_buffer,
@@ -41,12 +48,15 @@ int main (int argc, char **argv) {
 	size_t command_length = sizeof(conami_command) / sizeof(conami_command[0]);
 	__u32 command_interval = 500 * command_length;
 
+	int fd;
+	int version = 0x000800;
+	char name[NAME_LENGTH] = "Unknown";
+
 	if (argc < 2 || !strcmp("--help", argv[1]) || !strcmp("-h", argv[1])) {
 		puts("Usage: jschime <device>");
 		exit(1);
 	}
 
-	int fd;
 	if ((fd = open(argv[argc - 1], O_RDONLY)) < 0) {
 		perror("jschime");
 		exit(1);
@@ -54,14 +64,20 @@ int main (int argc, char **argv) {
 
 	unsigned char axes;
 	unsigned char buttons;
+	ioctl(fd, JSIOCGVERSION, &version);
 	ioctl(fd, JSIOCGAXES, &axes);
 	ioctl(fd, JSIOCGBUTTONS, &buttons);
+	ioctl(fd, JSIOCGNAME(NAME_LENGTH), name);
 
 	__u8 *axis_keycodes = malloc(sizeof(__u8) * axes * 2);
 
 	for (int i = 0; i < axes * 2; ++i) {
 		axis_keycodes[i] = buttons + i;
 	}
+
+	printf("Joystick (%s) has %d axes and %d buttons. Driver version is %d.%d.%d.\n",
+		name, axes, buttons, version >> 16, (version >> 8) & 0xff, version & 0xff);
+	printf("Testing ... (interrupt to exit)\n");
 
 	__u8 button_buffer[RING_BUFFER_LENGTH];
 	__u32 time_buffer[RING_BUFFER_LENGTH];
